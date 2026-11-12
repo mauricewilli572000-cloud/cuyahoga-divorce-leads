@@ -1,0 +1,166 @@
+"""Turn divorce cases + matched parcels into scored homeowner leads."""
+from __future__ import annotations
+
+import datetime as dt
+import re
+
+import config
+from addr import normalize_address
+from court import is_kept_type
+from parcels import name_key, party_person, same_person
+
+def case_label(case_type: str) -> str:
+    t = (case_type or "").upper()
+    kids = "CHILD" in t and not re.search(r"NO CHILD|W/O CHILD|WITHOUT CHILD", t)
+    if "DISSOLUTION" in t:
+        return "Dissolution" + (" with children" if kids else "")
+    if "SEPARATION" in t:
+        return "Legal separation"
+    if "ANNULMENT" in t:
+        return "Annulment"
+    return "Divorce" + (" with children" if kids else "")
+
+
+def spouses(case: dict) -> list[dict]:
+    out = []
+    for p in case.get("parties") or []:
+        person = party_person(p.get("name", ""))
+        if not person:
+            continue
+        key = normalize_address(p.get("street", "")) if p.get("state") == "OH" else ""
+        address = ", ".join(x for x in (p.get("street", "").title(),
+                                         " ".join(y for y in (p.get("city", ""), p.get("state", ""), p.get("zip", "")) if y)) if x)
+        out.append({**person, "name": re.sub(r"\s+", " ", p["name"]).title(), "role": p.get("role", ""),
+                    "address": address, "street": p.get("street", ""), "city": p.get("city", ""),
+                    "state": p.get("state", ""), "zip": p.get("zip", ""), "addr_key": key, "attorney": ""})
+    return out
+
+
+def lookup_parcels(case: dict, gis) -> None:
+    """Query the county GIS for parcels each spouse might own; store candidates on the case."""
+    from parcels import by_address, by_name
+    cands, counts = {}, {}
+    for s in spouses(case):
+        hits = by_name(gis, s)
+        counts["|".join(name_key(s))] = len(hits)
+        for h in hits:
+            cands[h["parcel"]] = h
+        if s["addr_key"]:
+            for h in by_address(gis, s["street"], s["zip"]):
+                cands.setdefault(h["parcel"], h)
+    case["cands"] = list(cands.values())
+    case["name_counts"] = counts
+
+
+def _days(iso: str, today: dt.date) -> int:
+    try:
+        return (today - dt.date.fromisoformat(iso[:10])).days
+    except (TypeError, ValueError):
+        return 9999
+
+
+def match_case(sp: list[dict], by_name: dict, by_addr: dict, name_counts: dict) -> list[dict]:
+    """Parcels owned by a spouse, each tagged with how sure the match is."""
+    cands = {}
+    for s in sp:
+        for h in by_name.get(name_key(s), []) + by_addr.get(s["addr_key"], []):
+            cands[h["parcel"]] = h
+    out = []
+    for h in cands.values():
+        owners = [s for s in sp if any(same_person(s, o) for o in h.get("owners", []))]
+        if not owners:
+            continue        # someone else owns it (a landlord, a parent) - not their home to sell
+        # The other spouse may be on the deed under the married name (court uses the maiden name).
+        lasts = {o["last"] for o in owners}
+        owners += [s for s in sp if s not in owners and any(
+            o["first"] == s["first"] and o["last"] in lasts and not any(same_person(m, o) for m in owners)
+            for o in h.get("owners", []))]
+        home = next((s for s in sp if s["addr_key"] and s["addr_key"] in h["keys"]), None)
+        at_home = home is not None
+        joint = len(sp) >= 2 and len(owners) >= 2
+        if not at_home and not joint:
+            if any(name_counts.get(name_key(s), 99) > config.NAME_ONLY_MAX_PARCELS for s in owners):
+                continue    # common name, no address to back it up
+            if len(h.get("owners", [])) > len(owners):
+                continue    # deed shared with someone who isn't the other spouse: likely a different person
+        match = ("home at spouse's address" if at_home else "owned by both spouses" if joint else "name match")
+        out.append({**{k: v for k, v in h.items() if k not in ("owners", "keys")},
+                    "match": match, "owned_by": [s["name"] for s in owners],
+                    "city": (home or {}).get("city", "") or h.get("city", ""),
+                    "zip": (home or {}).get("zip", "") or h.get("zip", "")})
+    rank = {"home at spouse's address": 0, "owned by both spouses": 1, "name match": 2}
+    return sorted(out, key=lambda p: (rank[p["match"]], -p["market_value"]))
+
+
+def score(case: dict, sp: list[dict], props: list[dict], today: dt.date) -> tuple[int, list[str]]:
+    pts, why = 50, ["Divorce / dissolution filed +50"]
+    top = props[0]
+    if top["match"] == "home at spouse's address":
+        pts += 20; why.append("Owns the home a spouse lives at +20")
+    if any(p["match"] == "owned by both spouses" or len(p["owned_by"]) >= 2 for p in props):
+        pts += 10; why.append("Owned jointly by both spouses +10")
+    if top["match"] == "name match":
+        pts -= 10; why.append("Matched by name only -10")
+    keys = {s["addr_key"] or s["street"] for s in sp if s["street"]}
+    if len(sp) >= 2 and len(keys) >= 2:
+        pts += 10; why.append("Spouses already living apart +10")
+    if any(s["state"] and s["state"] != "OH" for s in sp):
+        pts += 5; why.append("A spouse lives out of state +5")
+    if any(p["in_foreclosure"] for p in props):
+        pts += 15; why.append("Foreclosure flag on a property +15")
+    if any(p["delinquent_taxes"] > 0 for p in props):
+        pts += 10; why.append("Delinquent taxes +10")
+    if len(props) > 1:
+        pts += 5; why.append(f"{len(props)} properties +5")
+    d = _days(case.get("filed_date", ""), today)
+    if d <= 30:
+        pts += 10; why.append("Filed in the last 30 days +10")
+    elif d <= 90:
+        pts += 5; why.append("Filed in the last 90 days +5")
+    return max(0, min(100, pts)), why
+
+
+def build_leads(cases: dict, today: dt.date) -> list[dict]:
+    leads = []
+    for cn, c in cases.items():
+        if not c.get("found") or not is_kept_type(c.get("case_type", "")):
+            continue
+        if _days(c.get("filed_date", ""), today) > config.KEEP_DAYS:
+            continue
+        if "cands" not in c:
+            continue
+        sp = spouses(c)
+        by_name, by_addr = {}, {}
+        for h in c["cands"]:
+            for o in h.get("owners", []):
+                by_name.setdefault(name_key(o), []).append(h)
+            for k in h.get("keys", []):
+                by_addr.setdefault(k, []).append(h)
+        name_counts = {tuple(k.split("|")): v for k, v in (c.get("name_counts") or {}).items()}
+        props = match_case(sp, by_name, by_addr, name_counts)
+        if not props:
+            continue
+        pts, why = score(c, sp, props, today)
+        top = props[0]
+        leads.append({
+            "lead_id": cn, "case_number": cn, "case_type": c.get("case_type", ""),
+            "case_label": case_label(c.get("case_type", "")), "filed_date": c.get("filed_date", ""),
+            "judge": c.get("judge", ""), "status": c.get("status", ""), "disposition": c.get("disposition", ""),
+            "spouses": [{"name": s["name"], "address": s["address"], "role": s["role"].title(),
+                         "street": s["street"].title(), "city": s["city"], "state": s["state"], "zip": s["zip"]}
+                        for s in sp],
+            "property_address": top["address"].title(),
+            "city": top["city"], "zip": top["zip"],
+            "parcel": top["parcel"], "owner_name": top["owner_name"], "mailing_address": top["mailing_address"],
+            "market_value": top["market_value"],
+            "delinquent_taxes": sum(p["delinquent_taxes"] for p in props),
+            "in_foreclosure": any(p["in_foreclosure"] for p in props),
+            "match": top["match"], "properties": props, "property_count": len(props),
+            "score": pts, "score_reasons": why, "tier": "HOT" if pts >= 85 else "WARM" if pts >= 65 else "COLD",
+            "case_url": config.CASE_URL.format(case=cn),
+            "auditor_url": config.AUDITOR_URL.format(parcel=top["parcel"]) if top["parcel"] else "",
+            "added_date": c.get("first_seen", ""),
+        })
+    leads.sort(key=lambda l: l["filed_date"], reverse=True)   # newest first within the same score
+    leads.sort(key=lambda l: l["score"], reverse=True)
+    return leads
