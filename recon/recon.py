@@ -12,14 +12,14 @@ def lookup(year, num):
         SEARCH_TYPE_RADIO_NAME: "cvcase", P + "ddlCaseType": "DR", P + "ddlCaseYear": str(year),
         P + "txtCaseNum": num, P + "btnSubmitCase": "Submit Search"})
     return html
-for num in ["300000", "350000", "355000", "000100"]:
+for num in [str(n) for n in range(380000, 451000, 10000)] + ["100000", "200000", "500000", "600000", "800000", "900000"]:
     html = lookup(2026, num)
     sp = BeautifulSoup(html, "html.parser")
-    out("case", {"num": num, "url": s.current_url, "head": s.last_postback_raw_head[:300],
-                 "text": sp.get_text(" ", strip=True)[:2500]})
-    if "lblCaseNumber" in html:
+    out("case", {"num": num, "url": s.current_url, "found": "lblCaseNumber" in html,
+                 "text": sp.get_text(" ", strip=True)[:300] if "lblCaseNumber" not in html else sp.get_text(" | ", strip=True)[:3000]})
+    if "lblCaseNumber" in html and not globals().get("did"):
+        did = True
         time.sleep(2)
         ph = s.click_case_tab(CASE_TAB_PARTIES)
         out("parties", {"num": num, "url": s.current_url, "text": BeautifulSoup(ph, "html.parser").get_text(" | ", strip=True)[:5000]})
-        break
     time.sleep(3)
