@@ -1,22 +1,25 @@
 import json, re, sys, time
 sys.path.insert(0, "recon")
 from bs4 import BeautifulSoup
-from cpdocket import CuyahogaDocketSession, SEARCH_TYPE_RADIO_NAME
+from cpdocket import CuyahogaDocketSession, SEARCH_TYPE_RADIO_NAME, CASE_TAB_PARTIES
 def out(t, o): print(f"@@{t}@@ " + json.dumps(o)[:9000], flush=True)
+P = "ctl00$SheetContentPlaceHolder$civilCaseSearch$"
 s = CuyahogaDocketSession()
-html = s.load_search_page()
-soup = BeautifulSoup(html, "html.parser")
-radios = [{"id": r.get("id"), "value": r.get("value"), "onclick": (r.get("onclick") or "")[:150],
-           "label": (soup.find("label", {"for": r.get("id")}).get_text(" ", strip=True) if soup.find("label", {"for": r.get("id")}) else "")}
-          for r in soup.find_all("input", {"type": "radio"})]
-out("radios", radios)
-out("selects", [{"name": x.get("name"), "opts": [(o.get("value"), o.get_text(strip=True)) for o in x.find_all("option")][:40]} for x in soup.find_all("select")])
-picks = [r for r in radios if r["value"] and re.search(r"case", (r["label"] or "") + (r["id"] or ""), re.I)]
-for r in picks[:3]:
+def lookup(year, num):
+    s.load_search_page(); time.sleep(2)
+    s._async_postback("ctl00$SheetContentPlaceHolder$rbCivilCase", extra_fields={SEARCH_TYPE_RADIO_NAME: "cvcase"}); time.sleep(2)
+    html, _ = s._async_postback(P + "btnSubmitCase", extra_fields={
+        SEARCH_TYPE_RADIO_NAME: "cvcase", P + "ddlCaseType": "DR", P + "ddlCaseYear": str(year),
+        P + "txtCaseNum": num, P + "btnSubmitCase": "Submit Search"})
+    return html
+for num in ["300000", "350000", "355000", "000100"]:
+    html = lookup(2026, num)
+    sp = BeautifulSoup(html, "html.parser")
+    out("case", {"num": num, "url": s.current_url, "head": s.last_postback_raw_head[:300],
+                 "text": sp.get_text(" ", strip=True)[:2500]})
+    if "lblCaseNumber" in html:
+        time.sleep(2)
+        ph = s.click_case_tab(CASE_TAB_PARTIES)
+        out("parties", {"num": num, "url": s.current_url, "text": BeautifulSoup(ph, "html.parser").get_text(" | ", strip=True)[:5000]})
+        break
     time.sleep(3)
-    target = r["id"].replace("SheetContentPlaceHolder_", "ctl00$SheetContentPlaceHolder$")
-    content, _ = s._async_postback(target, extra_fields={SEARCH_TYPE_RADIO_NAME: r["value"]})
-    sp = BeautifulSoup(content, "html.parser")
-    out("panel", {"radio": r, "inputs": [(i.get("name"), i.get("type"), i.get("value")) for i in sp.find_all("input")][:40],
-                  "selects": [{"name": x.get("name"), "opts": [(o.get("value"), o.get_text(strip=True)) for o in x.find_all("option")][:30]} for x in sp.find_all("select")],
-                  "text": sp.get_text(" ", strip=True)[:1500]})
