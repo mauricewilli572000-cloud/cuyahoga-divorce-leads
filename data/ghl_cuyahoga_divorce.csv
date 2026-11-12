@@ -1,1 +1,7 @@
 ﻿First Name,Last Name,Mailing Address,City,State,Postal Code,Spouse,Property Address,Property City,Property Zip,Parcel,Est. Market Value,Lead Type,Case Type,Case Number,Filed Date,Score,Tier,Match,Tags
+John,Murphy,10528 Clairdoan Ave,Cleveland,OH,44108,Murphy Stacy P,10528 Clairdoan Ave,Cleveland,44108,10813193,422286,Divorce,Dissolution,DR-26-412058,2026-11-02,90,HOT,home at spouse's address,"divorce,cuyahoga,hot"
+Donta Lee,Harris,4031 Valley Road,Cleveland,OH,44109,Shenatra L Polk,4031 Valley Rd,Cleveland,44109,00916012,374571,Divorce,Dissolution with children,DR-26-412008,2026-10-29,90,HOT,home at spouse's address,"divorce,cuyahoga,hot"
+Steven L,Owens,11800 Wayland Ave,Cleveland,OH,44111,Shannon M Owens,11800 Wayland Ave,Cleveland,44111,01819116,290000,Divorce,Dissolution,DR-26-412023,2026-10-29,90,HOT,home at spouse's address,"divorce,cuyahoga,hot"
+Amy R,Ward,8888 Falls Lane,Broadview Heights,OH,44147,Richard Ward Jr,4617 Wetzel Ave,Cleveland,44109,01225125,389714,Divorce,Dissolution,DR-26-412034,2026-10-30,60,COLD,name match,"divorce,cuyahoga,cold"
+Victor Manuel,Santiago,8302 Lake Ave,Cleveland,OH,44102,Alice Angela Tiburcio Cordova,3357 W 131 St,Cleveland,44111,02129026,228857,Divorce,Dissolution,DR-26-412016,2026-10-29,60,COLD,name match,"divorce,cuyahoga,cold"
+Maria Niki,Michalopoulos,13840 Lake Avenue,Lakewood,OH,44107,Haissam Gamaleldin,10813 Clifton Blvd,Cleveland,44102,00117044,772000,Divorce,Divorce,DR-26-412006,2026-10-28,60,COLD,name match,"divorce,cuyahoga,cold"
