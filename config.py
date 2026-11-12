@@ -13,7 +13,7 @@ from pathlib import Path
 
 MAX_LOOKUPS_PER_RUN = 60    # cases per run (about 3-4 page requests each)
 REQUEST_DELAY = 2.5         # seconds between page requests
-MISSES_TO_STOP = 6          # missing numbers in a row = reached the newest case (DV cases are hidden, so allow gaps)
+MISSES_TO_STOP = 15         # missing numbers in a row = reached the newest case (hidden/sealed cases leave gaps of 10+)
 BACKFILL_DAYS = 30          # on first run, also read cases filed in the last 30 days (spread over several runs)
 KEEP_DAYS = 365             # leads older than this drop off the dashboard
 

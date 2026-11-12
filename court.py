@@ -102,7 +102,7 @@ class Docket:
         self._pause()
         info = parse_summary(html)
         if not info:
-            if self.requests < 40:
+            if self.requests < 12:
                 log.info("%s: no case (%s)", cn, (self.s.current_url or "")[-60:])
             return None
         if is_kept_type(info["case_type"]):

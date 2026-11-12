@@ -13,7 +13,7 @@ import leads as L
 from parcels import Gis
 
 log = logging.getLogger("cuyahoga_divorce")
-KNOWN_NUMBER = 410000            # DR-26-410000 was filed 06/16/2026 - a starting point for the first run
+KNOWN_NUMBER = 412000            # DR-26-412000 was filed 10/28/2026 - where the first run starts reading forward
 
 
 class Reader:
@@ -54,19 +54,10 @@ class Reader:
 def read_cases(state: dict, cases: dict, today: dt.date) -> None:
     r = Reader(cases, today)
     if "high" not in state:
-        r.left += 60                     # first run: finding the newest case number takes extra lookups
-        def exists(n):
-            return r.lookup(n) is not None
-        if not exists(KNOWN_NUMBER):
-            log.error("Starting case %s not readable - clerk site may be down", KNOWN_NUMBER)
-            return
-        newest = court.find_newest(exists, KNOWN_NUMBER, KNOWN_NUMBER + 20000)
-        if r.failed or r.left <= 0:
-            log.error("Could not finish finding the newest case this run; will retry next run")
-            return
-        state.update({"high": newest, "backfill_next": newest - 1,
+        # Numbers have gaps (hidden/sealed cases), so no guessing: read forward from a known recent case,
+        # and back-fill downward from it until cases are older than the back-fill window.
+        state.update({"high": KNOWN_NUMBER - 1, "backfill_next": KNOWN_NUMBER - 1,
                       "backfill_until": (today - dt.timedelta(days=config.BACKFILL_DAYS)).isoformat()})
-        log.info("Newest case number is %s; back-filling cases filed since %s", newest, state["backfill_until"])
 
     new, n, misses = 0, state["high"] + 1, 0
     while r.left > 0 and not r.failed and misses < config.MISSES_TO_STOP:
