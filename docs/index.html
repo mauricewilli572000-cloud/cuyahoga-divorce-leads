@@ -39,7 +39,7 @@
   <label><input type="checkbox" id="distress"> tax / foreclosure</label>
   <a href="ghl_cuyahoga_divorce.csv" download>Download GHL CSV</a>
   <span class="meta" id="count"></span>
-  <span class="meta">Case pages: search the case number at <a href="https://cpdocket.cp.cuyahogacounty.gov/Search.aspx" target="_blank" rel="noopener">cpdocket</a> (Civil search by case, type DR). Values are county estimates.</span>
+  <span class="meta">Case pages: search the case number at <a href="https://cpdocket.cp.cuyahogacounty.gov/Search.aspx" target="_blank" rel="noopener">cpdocket</a> (Civil search by case, type DR).</span>
 </div>
 <div class="wrap">
   <table>
@@ -101,7 +101,7 @@ function render() {
      r.in_foreclosure ? "foreclosure flag" : ""].filter(Boolean).forEach(t => {
       const g = document.createElement("span"); g.className = "tag"; g.textContent = t; m.append(g); });
     const v = document.createElement("td");
-    if (r.auditor_url) { const l = document.createElement("a"); l.href = r.auditor_url; l.target = "_blank"; l.rel = "noopener"; l.textContent = (r.market_value ? "~" + money(r.market_value) : "MyPlace"); v.append(l); }
+    if (r.auditor_url) { const l = document.createElement("a"); l.href = r.auditor_url; l.target = "_blank"; l.rel = "noopener"; l.textContent = (money(r.market_value) || "MyPlace"); v.append(l); }
     else v.textContent = money(r.market_value);
     tr.append(p, s, c, m, v, td(r.filed_date));
     return tr;

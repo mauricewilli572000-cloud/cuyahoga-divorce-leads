@@ -21,10 +21,11 @@ SUMMARY_HTML = "<table>" + "".join(f"<tr><td>{a}</td><td>{b}</td></tr>" for a, b
 TODAY = dt.date(2026, 11, 11)
 
 
-def gis_row(addr, owner, pin="12131022", **kw):
+def gis_row(addr, owner, pin="12131022", second=None, **kw):
     num, _, street = addr.partition(" ")
-    r = {"parcelpin": pin, "deeded_owner": owner, "par_addr_all": f"{num}  {street}, CLEVELAND, OH, 44111",
-         "par_city": "CLEVELAND", "par_zip": 44111, "gross_certified_total": 35000,
+    r = {"PARCELPIN": pin, "parcel_owner": owner, "second_owner": second,
+         "par_addr_all": f"{addr}, CLEVELAND, OH, 44111", "parcel_addr": num, "parcel_street": street,
+         "parcel_city": "CLEVELAND", "parcel_zip": 44111, "tax_market_total": 100000, "total_net_delq_balance": 0,
          "mail_addr_street": addr, "mail_city": "Cleveland", "mail_state": "OH", "mail_zip": "44111"}
     r.update(kw)
     return P.parcel_info(r)
@@ -89,3 +90,12 @@ def test_renter_dropped():
 def test_joint_owner_elsewhere():
     out = L.build_leads(case([gis_row("77 ELM ST", "ANTER, MOUSTAFA & IMAN", pin="99999999")]), TODAY)
     assert out and out[0]["match"] == "owned by both spouses"
+
+
+def test_second_owner_and_tax_fields():
+    h = gis_row("77 ELM ST", "ANTER, MOUSTAFA", pin="99999999", second="ANTER, IMAN",
+                total_net_delq_balance=1234.5, foreclosure_flag=1)
+    assert h["owner_name"] == "ANTER, MOUSTAFA & ANTER, IMAN"
+    out = L.build_leads(case([h]), TODAY)
+    assert out[0]["match"] == "owned by both spouses"
+    assert out[0]["delinquent_taxes"] == 1234.5 and out[0]["in_foreclosure"]

@@ -82,24 +82,29 @@ class Gis:
         self.left = budget
 
     def query(self, where: str) -> list[dict]:
-        if self.left <= 0:
-            raise RuntimeError("GIS query budget used up")
-        self.left -= 1
-        params = {"where": where, "outFields": config.PARCEL_FIELDS, "returnGeometry": "false", "f": "json",
-                  "resultRecordCount": 200}
-        last = None
-        for attempt in range(3):
-            try:
-                r = S.get(config.PARCELS_QUERY, params=params, timeout=90)
-                d = r.json()
-                if "error" in d:
-                    raise RuntimeError(str(d["error"])[:200])
-                return [f.get("attributes") or {} for f in d.get("features") or []]
-            except Exception as e:  # noqa: BLE001
-                last = e
-                time.sleep(3 * (attempt + 1))
-        log.warning("GIS query failed (%s): %s", last, where[:120])
-        return []
+        """Run the query on each parcel layer (houses, condos); returns all attribute rows."""
+        rows = []
+        for layer in config.PARCEL_LAYERS:
+            if self.left <= 0:
+                raise RuntimeError("GIS query budget used up")
+            self.left -= 1
+            params = {"where": where, "outFields": config.PARCEL_FIELDS, "returnGeometry": "false", "f": "json",
+                      "resultRecordCount": 200}
+            last = None
+            for attempt in range(3):
+                try:
+                    d = S.get(f"{config.PARCELS_BASE}/{layer}/query", params=params, timeout=90).json()
+                    if "error" in d:
+                        raise RuntimeError(str(d["error"])[:200])
+                    rows += [f.get("attributes") or {} for f in d.get("features") or []]
+                    last = None
+                    break
+                except Exception as e:  # noqa: BLE001
+                    last = e
+                    time.sleep(3 * (attempt + 1))
+            if last:
+                log.warning("GIS query failed on layer %s (%s): %s", layer, last, where[:120])
+        return rows
 
 
 def _q(s: str) -> str:
@@ -113,32 +118,38 @@ def _num(v) -> float:
         return 0.0
 
 
+def _s(v) -> str:
+    return re.sub(r"\s+", " ", str(v or "")).strip()
+
+
 def parcel_info(a: dict) -> dict:
-    addr = re.sub(r"\s+", " ", str(a.get("par_addr_all") or "")).strip()
-    street = re.sub(r"\s+", " ", re.split(r",", addr)[0]).strip()
-    mail = ", ".join(p for p in (re.sub(r"\s+", " ", str(a.get("mail_addr_street") or "")).strip(),
-                                 " ".join(str(a.get(k) or "").strip() for k in ("mail_city", "mail_state", "mail_zip")).strip())
-                     if p)
+    street = " ".join(p for p in (_s(a.get("parcel_addr")), _s(a.get("parcel_street"))) if p)
+    full = _s(a.get("par_addr_all"))
+    site = re.split(r",", full)[0].strip() if full else street
+    owner = " & ".join(p for p in (_s(a.get("parcel_owner")), _s(a.get("second_owner"))) if p)
+    mail = ", ".join(p for p in (_s(a.get("mail_addr_street")),
+                                 " ".join(_s(a.get(k)) for k in ("mail_city", "mail_state", "mail_zip")).strip()) if p)
     return {
-        "parcel": re.sub(r"\D", "", str(a.get("parcelpin") or "")),
-        "address": street,
-        "keys": [k for k in {normalize_address(street)} if k],
-        "city": str(a.get("par_city") or "").title(),
-        "zip": str(a.get("par_zip") or "").split(".")[0][:5],
-        "owner_name": re.sub(r"\s+", " ", str(a.get("deeded_owner") or "")).strip(),
-        "owners": owner_people(str(a.get("deeded_owner") or "")),
+        "parcel": re.sub(r"[^0-9A-Z]", "", _s(a.get("PARCELPIN")).upper()),
+        "address": site,
+        "keys": [k for k in {normalize_address(site)} if k],
+        "city": _s(a.get("parcel_city")).title(),
+        "zip": _s(a.get("parcel_zip")).split(".")[0][:5],
+        "owner_name": owner,
+        "owners": owner_people(owner),
         "mailing_address": mail,
-        # county values are assessed (35% of market); convert to an estimated market value
-        "market_value": round(_num(a.get("gross_certified_total") or a.get("certified_tax_total")) / 0.35),
-        "land_use": str(a.get("tax_luc_description") or ""),
-        "in_foreclosure": False,
-        "delinquent_taxes": 0.0,
+        "market_value": round(_num(a.get("tax_market_total"))),
+        "land_use": _s(a.get("tax_luc_description")),
+        "in_foreclosure": bool(a.get("foreclosure_flag")) and _s(a.get("foreclosure_flag")) not in ("0", "N"),
+        "delinquent_taxes": _num(a.get("total_net_delq_balance")),
+        "homestead": bool(a.get("homestead_flag")),
     }
 
 
 def by_name(gis: Gis, person: dict) -> list[dict]:
     """Parcels whose deeded owner names this person (any owner format)."""
-    rows = gis.query(f"UPPER(deeded_owner) LIKE '%{_q(person['last'])}%{_q(person['first'])}%'")
+    pat = f"%{_q(person['last'])}%{_q(person['first'])}%"
+    rows = gis.query(f"UPPER(parcel_owner) LIKE '{pat}' OR UPPER(second_owner) LIKE '{pat}'")
     out = []
     for a in rows:
         info = parcel_info(a)
@@ -157,7 +168,7 @@ def by_address(gis: Gis, street: str, zipc: str) -> list[dict]:
     if not words:
         return []
     core = max(words, key=len)
-    where = f"par_addr = '{_q(m.group(1))}' AND UPPER(par_street) LIKE '%{_q(core)}%'"
+    where = f"parcel_addr = '{_q(m.group(1))}' AND UPPER(parcel_street) LIKE '%{_q(core)}%'"
     hits = [i for i in (parcel_info(a) for a in gis.query(where)) if key and key in i["keys"]]
     if zipc and len(hits) > 1:      # same street name in two suburbs: keep the one in the right ZIP
         hits = [i for i in hits if i["zip"] == zipc] or hits

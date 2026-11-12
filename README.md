@@ -11,14 +11,15 @@ Homeowners in Cuyahoga County (Cleveland), Ohio who just filed for divorce, diss
    only the numbers after the last one it saw. The case summary shows the case type; the Parties tab
    (both spouses' names and addresses) is opened only for divorce, dissolution, legal separation and
    annulment. Domestic violence cases are not online and are never read; no names are kept for other case types.
-2. **Homes**: looks each spouse up in the county GIS parcel data (by name, and by the address they gave the court):
+2. **Homes**: looks each spouse up in the Fiscal Officer's countywide parcel data (county GIS) (by name, and by the address they gave the court):
    - **home at spouse's address**: a spouse owns the parcel at the address they gave the court (strongest)
    - **owned by both spouses**: both are on the deed (including a wife listed under her married name)
    - **name match**: one spouse's name is on a parcel elsewhere, kept only for rare names
    Spouses who rent are dropped.
 3. **Score**: 50 base, +20 owns the home they live in, +10 joint owners, +10 already living apart,
-   +5 a spouse out of state, +10 filed in the last 30 days. HOT is 85+, WARM is 65+.
-   Values are the county's assessed value divided by 0.35 (an estimate of market value).
+   +5 a spouse out of state, +15 foreclosure flag, +10 delinquent taxes, +10 filed in the last 30 days.
+   HOT is 85+, WARM is 65+.
+   Values are the Fiscal Officer's market value.
 
 ## Light on the court site
 

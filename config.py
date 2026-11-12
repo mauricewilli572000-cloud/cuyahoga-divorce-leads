@@ -17,12 +17,17 @@ MISSES_TO_STOP = 15         # missing numbers in a row = reached the newest case
 BACKFILL_DAYS = 30          # on first run, also read cases filed in the last 30 days (spread over several runs)
 KEEP_DAYS = 365             # leads older than this drop off the dashboard
 
-PARCELS_QUERY = "https://gis.cuyahogacounty.gov/server/rest/services/Open_Data_Parcels/MapServer/0/query"
-PARCEL_FIELDS = ("parcelpin,deeded_owner,par_addr_all,par_city,par_zip,mail_name,mail_addr_street,mail_city,"
-                 "mail_state,mail_zip,tax_luc_description,certified_tax_total,gross_certified_total,par_addr,par_street")
-MAX_GIS_QUERIES_PER_RUN = 600
+# Countywide Fiscal Officer appraisal parcels (Open_Data_Parcels is Cleveland-only).
+# Layer 2 = standard parcels (houses, lots), layer 0 = condos.
+PARCELS_BASE = "https://gis.cuyahogacounty.gov/server/rest/services/CCFO/Current_Year_Appraisal_Parcels/MapServer"
+PARCEL_LAYERS = [2, 0]
+PARCEL_FIELDS = ("PARCELPIN,parcel_owner,second_owner,par_addr_all,parcel_addr,parcel_street,parcel_city,parcel_zip,"
+                 "mail_addr_street,mail_city,mail_state,mail_zip,tax_luc_description,tax_market_total,"
+                 "total_net_delq_balance,foreclosure_flag,homestead_flag")
+MATCH_VERSION = 2           # bump to re-match every stored case against the parcel data
+MAX_GIS_QUERIES_PER_RUN = 1200
 CASE_URL = "https://cpdocket.cp.cuyahogacounty.gov/Search.aspx"
-AUDITOR_URL = "https://myplace.cuyahogacounty.gov/?parcel={parcel}"
+AUDITOR_URL = "https://myplace.cuyahogacounty.gov/"
 
 KEEP_TYPE_WORDS = ["DIVORCE", "DISSOLUTION", "SEPARATION", "ANNULMENT"]
 SKIP_TYPE_WORDS = ["VIOLENCE", "STALKING", "PROTECTION"]

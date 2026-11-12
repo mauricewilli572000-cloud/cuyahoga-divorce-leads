@@ -83,13 +83,14 @@ def read_cases(state: dict, cases: dict, today: dt.date) -> None:
 def find_homes(cases: dict, today: dt.date) -> None:
     gis = Gis(config.MAX_GIS_QUERIES_PER_RUN)
     todo = [c for c in cases.values() if c.get("found") and court.is_kept_type(c.get("case_type", ""))
-            and "cands" not in c and c.get("parties")]
+            and c.get("parties") and c.get("match_version") != config.MATCH_VERSION]
     done = 0
     for c in sorted(todo, key=lambda c: c.get("filed_date", ""), reverse=True):
         if gis.left < 6:
             break
         L.lookup_parcels(c, gis)
         c["matched_on"] = today.isoformat()
+        c["match_version"] = config.MATCH_VERSION
         done += 1
     log.info("Homes: looked up %d cases (%d still waiting), %d GIS queries used",
              done, len(todo) - done, config.MAX_GIS_QUERIES_PER_RUN - gis.left)
