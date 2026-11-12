@@ -14,12 +14,10 @@ TOKENS = ["Case Parties", "PLAINTIFF", "(1)", "IMAN  MOUSTAFA", "3549 WEST 136TH
           "NORTH OLMSTED, OH 44070", "ATTORNEY", "LILA DAWUD RASLAN (0073256)", "1701 EAST 12TH STREET SUITE 3GW",
           "CLEVELAND, OH 44114-0000", "Print Page"]
 PARTIES_HTML = "<table>" + "".join(f"<tr><td>{t}</td></tr>" for t in TOKENS) + "</table>"
-SUMMARY_HTML = """<span id="SheetContentPlaceHolder_caseSummary_lblCaseNumber">DR-26-410000</span>
-<span id="SheetContentPlaceHolder_caseSummary_lblCaseTitle">IMAN MOUSTAFA vs. MOUSTAFA ANTER</span>
-<span id="SheetContentPlaceHolder_caseSummary_lblCaseDesignation">DISSOLUTION-CHILDREN</span>
-<span id="SheetContentPlaceHolder_caseSummary_lblFilingDate">11/02/2026</span>
-<span id="SheetContentPlaceHolder_caseSummary_lblJudge">FRANCINE B GOLDBERG</span>
-<span id="SheetContentPlaceHolder_caseSummary_lblLastStatus">ACTIVE</span>"""
+SUMMARY_HTML = "<table>" + "".join(f"<tr><td>{a}</td><td>{b}</td></tr>" for a, b in [
+    ("Case Number:", "DR-26-410000"), ("Case Title:", "IMAN MOUSTAFA vs. MOUSTAFA ANTER"),
+    ("Case Designation:", "DISSOLUTION-CHILDREN"), ("Filing Date:", "11/02/2026"), ("Judge:", "FRANCINE B GOLDBERG"),
+    ("Hearing Officer:", "N/A"), ("Last Status:", "ACTIVE"), ("Last Disposition:", "N/A")]) + "</table>"
 TODAY = dt.date(2026, 11, 11)
 
 

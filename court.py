@@ -28,23 +28,27 @@ def is_kept_type(case_type: str) -> bool:
     return any(w in t for w in config.KEEP_TYPE_WORDS) and not any(w in t for w in config.SKIP_TYPE_WORDS)
 
 
-def _label(soup, key):
-    tag = soup.find(id=SUMMARY + key)
-    return tag.get_text(" ", strip=True) if tag else ""
+FIELDS = {"case number": "case_number", "case title": "caption", "case designation": "case_type",
+          "filing date": "filed_date", "judge": "judge", "last status": "status", "last disposition": "disposition"}
 
 
 def parse_summary(html: str) -> dict | None:
-    if "lblCaseNumber" not in html:
+    """Case summary page -> fields (read from the 'Label: | value' text, which works for every case type)."""
+    if "Filing Date" not in html:
         return None
-    soup = BeautifulSoup(html, "html.parser")
-    filed = _label(soup, "lblFilingDate")
-    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})", filed)
+    toks = [re.sub(r"\s+", " ", t).strip() for t in BeautifulSoup(html, "html.parser").get_text(" | ", strip=True).split("|")]
+    toks = [t for t in toks if t]
+    info = {}
+    for i, t in enumerate(toks[:-1]):
+        key = FIELDS.get(t.rstrip(":").strip().lower())
+        if key and t.endswith(":") and key not in info:
+            nxt = toks[i + 1]
+            info[key] = "" if nxt.endswith(":") else nxt
+    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})", info.get("filed_date", ""))
     if not m:
         return None
-    return {"case_number": _label(soup, "lblCaseNumber"), "caption": _label(soup, "lblCaseTitle"),
-            "case_type": _label(soup, "lblCaseDesignation"), "judge": _label(soup, "lblJudge"),
-            "status": _label(soup, "lblLastStatus"), "disposition": _label(soup, "lblLastDisposition"),
-            "filed_date": f"{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}"}
+    info["filed_date"] = f"{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}"
+    return info
 
 
 def parse_parties(html: str) -> list[dict]:
@@ -98,6 +102,8 @@ class Docket:
         self._pause()
         info = parse_summary(html)
         if not info:
+            if self.requests < 40:
+                log.info("%s: no case (%s)", cn, (self.s.current_url or "")[-60:])
             return None
         if is_kept_type(info["case_type"]):
             info["parties"] = parse_parties(self.s.click_case_tab(CASE_TAB_PARTIES))
